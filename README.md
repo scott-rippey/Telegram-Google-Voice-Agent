@@ -159,10 +159,12 @@ must create your own Google Cloud OAuth client:
 If you skip this, the helper safely falls back to Gmail-only contact search (the People node
 is set to continue-on-error).
 
-### 7. Activate it
-In n8n, open the main workflow (**voice-assistant-MAIN**) and flip the toggle to **Active**
-(top-right). That registers the Telegram webhook — the one thing that actually switches the
-bot on. Then just message your bot (anything from **Example things to say** at the top). 🎉
+### 7. Activate it (this connects your bot)
+In n8n, open the main workflow (**voice-assistant-MAIN**) and flip it to **Active** (toggle,
+top-right). On activation, n8n automatically registers a webhook with Telegram — pointing your
+BotFather bot's incoming messages at this workflow. You never set up a webhook by hand. It must
+**stay Active** to receive messages (deactivate it, or re-import without re-activating, and the
+bot goes silent). Then just message your bot — anything from **Example things to say** above. 🎉
 
 ---
 

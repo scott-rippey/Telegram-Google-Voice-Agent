@@ -59,8 +59,9 @@ The MAIN workflow calls the four helpers as **sub-workflow tools**.
    - *(optional)* MAIN's **AI Agent** system message addresses the user generically as "the user" — personalize it to my name if I want
    - timezone `America/New_York` (workflow settings + a few nodes + the prompt) → mine, if different
 
-6. **Activate MAIN** (this registers the Telegram webhook) and have me message the bot to test —
-   e.g. "Add a task to test this bot tomorrow." It should reply with a draft + Approve/Cancel buttons.
+6. **Activate MAIN.** Flipping it Active makes n8n automatically register the Telegram webhook —
+   pointing the @BotFather bot's messages at this n8n instance (no manual webhook setup), and it
+   must stay Active to keep receiving. Then have me message the bot to test.
 
 7. **(Optional) People API** for saved-contacts search. The `List Contacts` node in the contacts
    helper needs a **Google OAuth2 API** cred with the `contacts.readonly` scope. n8n's one-click
