@@ -21,9 +21,12 @@ The MAIN workflow calls the four helpers as **sub-workflow tools**.
 
 ## Setup procedure (please walk me through this)
 
-1. **Connect to my n8n.** If there's no `.env` with `N8N_URL` + `N8N_API_KEY`, ask me for my
-   instance URL and an API key (n8n → Settings → n8n API), save them, and verify with
-   `n8n-cli workflow list`.
+1. **Check the CLI, then connect to my n8n.** This uses n8n's official CLI. If
+   `n8n-cli --version` fails, tell me to install it: `npm install -g @n8n/cli` (and
+   `n8n-cli skill install` pulls this very skill — the official n8n one, self-contained).
+   Then connect: if there's no `.env` with `N8N_URL` + `N8N_API_KEY`, run `n8n-cli login`
+   (or ask me for my instance URL + an API key from n8n → Settings → n8n API), then verify
+   with `n8n-cli workflow list`.
 
 2. **Import the four helpers first, then MAIN** — `n8n-cli workflow create --file=docs/<file>.json`
    for each. Record the **new workflow id** each one returns.

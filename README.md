@@ -74,6 +74,25 @@ create-time options get dropped by the tool node — so those go through direct 
 
 ---
 
+## Fastest path — let an AI agent install it for you
+
+This repo ships a `CLAUDE.md` so an AI coding agent (Claude Code, Cursor, Windsurf) can import
+the workflows and walk you through setup. The tooling comes straight from n8n:
+
+```bash
+npm install -g @n8n/cli         # 1. the official n8n CLI (gives you the `n8n-cli` command)
+n8n-cli login                   # 2. connect it to your n8n instance (saves URL + API key)
+n8n-cli skill install --global  # 3. install the n8n skill into your agent
+#    (default target is Claude Code; add --target=cursor or --target=windsurf for those)
+```
+
+Then open this folder in your agent and say **"set this up."** It reads `CLAUDE.md` and uses
+the CLI to import the five workflows, re-link them, and guide you through credentials.
+
+Prefer to do it by hand? The manual n8n-UI steps below need no CLI or agent.
+
+---
+
 ## Setup
 
 ### 1. Import the workflows (helpers first)
