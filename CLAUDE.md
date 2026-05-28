@@ -1,4 +1,4 @@
-# Telegram Voice → Google Tasks & Calendar Assistant — setup project
+# Telegram Voice → Google Tasks, Calendar & Email Assistant — setup project
 
 This project installs a ready-made **n8n** workflow: a Telegram bot that turns voice or text
 into Google Tasks, Calendar events (invites, Google Meet links, recurring events, availability

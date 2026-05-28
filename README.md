@@ -1,4 +1,4 @@
-# Voice → Google Tasks & Calendar Assistant (n8n)
+# Voice → Google Tasks, Calendar & Email Assistant (n8n)
 
 A Telegram bot that turns your **voice notes or typed messages** into action. Talk to it
 in plain English ("schedule a call with Dana next Tuesday at 2 and add a Meet link") and

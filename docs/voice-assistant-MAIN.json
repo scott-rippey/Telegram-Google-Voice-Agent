@@ -1,5 +1,5 @@
 {
-  "name": "Voice → Google Tasks Assistant",
+  "name": "Voice → Google Tasks, Calendar & Email Assistant",
   "settings": {
     "executionOrder": "v1",
     "timezone": "America/New_York",
