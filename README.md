@@ -159,10 +159,10 @@ must create your own Google Cloud OAuth client:
 If you skip this, the helper safely falls back to Gmail-only contact search (the People node
 is set to continue-on-error).
 
-### 7. Activate & test
-Open **MAIN**, toggle it **Active** (this registers the Telegram webhook), then message your
-bot: *"Add a task to test this bot tomorrow."* It should reply with a draft + Approve/Cancel
-buttons. Tap Approve and check Google Tasks. 🎉
+### 7. Activate it
+In n8n, open the main workflow (**voice-assistant-MAIN**) and flip the toggle to **Active**
+(top-right). That registers the Telegram webhook — the one thing that actually switches the
+bot on. Then just message your bot (anything from **Example things to say** at the top). 🎉
 
 ---
 
