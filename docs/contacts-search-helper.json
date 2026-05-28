@@ -1,0 +1,133 @@
+{
+  "name": "Contacts Search Helper (agent tool)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "nodes": [
+    {
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "query",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Search Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        0
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 10,
+        "simple": false,
+        "filters": {
+          "q": "=from:{{ $json.query }} OR to:{{ $json.query }}"
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "List Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "executeOnce": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "https://people.googleapis.com/v1/people/me/connections",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "personFields",
+              "value": "names,emailAddresses"
+            },
+            {
+              "name": "pageSize",
+              "value": "500"
+            },
+            {
+              "name": "sortOrder",
+              "value": "LAST_MODIFIED_DESCENDING"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Rank Contacts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const q = String($('When Called').first().json.query || '').toLowerCase().trim();\n// The user's own addresses — never suggest these as someone to invite.\nconst SELF = ['you@example.com','you-alias@example.com','you-alt@example.com','you-personal@example.com'];\nconst tally = {};\nfunction ensure(email){\n  const e = String(email || '').toLowerCase();\n  if(!e.includes('@') || SELF.includes(e)) return null;\n  if(!tally[e]) tally[e] = { name:'', email:e, messages:0, saved:false };\n  return tally[e];\n}\n// 1) Recent Gmail correspondents (from/to/cc), counted by frequency.\nfor(const it of $('Search Gmail').all()){\n  const j = it.json || {};\n  for(const grp of ['from','to','cc']){\n    const v = (j[grp] && j[grp].value) || [];\n    for(const p of v){\n      if(!p || !p.address) continue;\n      const t = ensure(p.address); if(!t) continue;\n      t.messages++;\n      const nm = String(p.name || '').trim();\n      if(nm && !t.name) t.name = nm;\n    }\n  }\n}\n// 2) Saved Google Contacts (People API connections) — deliberate address book.\nconst conns = ($('List Contacts').first().json.connections) || [];\nfor(const person of conns){\n  const pname = ((person.names || [])[0] || {}).displayName || '';\n  for(const ea of (person.emailAddresses || [])){\n    const t = ensure(ea.value); if(!t) continue;\n    t.saved = true;\n    if(pname && !t.name) t.name = pname;\n  }\n}\n// --- fuzzy name matching (Levenshtein) so 'james' matches 'jaymes' etc. ---\nfunction lev(a,b){\n  const m=a.length, n=b.length; if(!m) return n; if(!n) return m;\n  let prev=[]; for(let j=0;j<=n;j++) prev[j]=j;\n  for(let i=1;i<=m;i++){ const cur=[i];\n    for(let j=1;j<=n;j++){ cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1)); }\n    prev=cur; }\n  return prev[n];\n}\nfunction tokSim(a,b){\n  if(a===b) return 1;\n  if(a.length>=3 && b.length>=3 && (a.includes(b)||b.includes(a))) return 0.85;\n  const L=Math.max(a.length,b.length); if(!L) return 0;\n  const s=1 - lev(a,b)/L; return s>=0.7 ? s : 0;\n}\nfunction relevance(name, email){\n  const qt = q.split(' ').filter(Boolean); if(!qt.length) return 1;\n  const local = String(email||'').split('@')[0].split('.').join(' ').split('_').join(' ').split('-').join(' ');\n  const nt = (String(name||'').toLowerCase()+' '+local.toLowerCase()).split(' ').filter(Boolean);\n  let total=0, hits=0;\n  for(const t of qt){ let best=0; for(const w of nt) best=Math.max(best, tokSim(t,w)); total+=best; if(best>=0.7) hits++; }\n  if(!hits) return 0;\n  return (total/qt.length) + (hits===qt.length ? 0.25 : 0);\n}\nlet list = Object.values(tally).map(p => ({ name:p.name, email:p.email, messages:p.messages, saved:p.saved, rel: relevance(p.name, p.email) }));\n// Keep only plausible matches (>=1 close token); when q is blank, keep everything.\nif(q) list = list.filter(p => p.rel > 0);\n// Rank: name closeness first, then saved-contact tier, then email frequency.\nlist.sort((a,b) => (b.rel - a.rel) || ((b.saved?1:0)-(a.saved?1:0)) || (b.messages - a.messages));\nconst top = list.slice(0,8).map(p => ({ json: { name: p.name || null, email: p.email, messages: p.messages, savedContact: p.saved, match: Math.round(p.rel*100)/100 } }));\nreturn top.length ? top : [{ json: { note: 'No contact found close to that name in saved contacts or recent email.', query: q } }];"
+      }
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Search Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Gmail": {
+      "main": [
+        [
+          {
+            "node": "List Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Contacts": {
+      "main": [
+        [
+          {
+            "node": "Rank Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "name": "Calendar Create Helper (agent tool)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "nodes": [
+    {
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "summary",
+              "type": "string"
+            },
+            {
+              "name": "startDateTime",
+              "type": "string"
+            },
+            {
+              "name": "endDateTime",
+              "type": "string"
+            },
+            {
+              "name": "attendees",
+              "type": "string"
+            },
+            {
+              "name": "description",
+              "type": "string"
+            },
+            {
+              "name": "addMeet",
+              "type": "boolean"
+            },
+            {
+              "name": "recurrence",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Build Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const j = $('When Called').first().json || {};\nconst attendees = String(j.attendees || '').split(',').map(s => s.trim()).filter(s => s).map(e => ({ email: e }));\nconst body = {\n  summary: j.summary,\n  start: { dateTime: j.startDateTime, timeZone: 'America/New_York' },\n  end:   { dateTime: j.endDateTime,   timeZone: 'America/New_York' }\n};\nif (j.description) body.description = j.description;\nif (attendees.length) body.attendees = attendees;\nconst addMeet = (j.addMeet === true || j.addMeet === 'true' || j.addMeet === 'yes');\nif (addMeet) {\n  body.conferenceData = { createRequest: { requestId: 'meet-' + Date.now() + '-' + Math.floor(Math.random()*1e6), conferenceSolutionKey: { type: 'hangoutsMeet' } } };\n}\nlet rec = String(j.recurrence || '').trim();\nif (rec) {\n  if (!/^(RRULE|RDATE|EXDATE):/i.test(rec)) rec = 'RRULE:' + rec;\n  body.recurrence = [rec];\n}\nreturn [{ json: { body } }];"
+      }
+    },
+    {
+      "name": "Insert Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "sendUpdates",
+              "value": "all"
+            },
+            {
+              "name": "conferenceDataVersion",
+              "value": "1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      }
+    },
+    {
+      "name": "Compact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const e = $input.first().json || {};\nreturn [{ json: {\n  id: e.id,\n  summary: e.summary,\n  start: e.start && (e.start.dateTime || e.start.date),\n  end: e.end && (e.end.dateTime || e.end.date),\n  meetLink: e.hangoutLink || null,\n  attendees: (e.attendees || []).map(a => a.email),\n  recurrence: e.recurrence || null,\n  htmlLink: e.htmlLink,\n  status: e.status\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Build Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Body": {
+      "main": [
+        [
+          {
+            "node": "Insert Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Event": {
+      "main": [
+        [
+          {
+            "node": "Compact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

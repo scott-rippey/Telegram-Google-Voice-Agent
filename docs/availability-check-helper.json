@@ -1,0 +1,111 @@
+{
+  "name": "Availability Check Helper (agent tool)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "nodes": [
+    {
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "startDateTime",
+              "type": "string"
+            },
+            {
+              "name": "endDateTime",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "List Window (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "timeMin",
+              "value": "={{ $json.startDateTime }}"
+            },
+            {
+              "name": "timeMax",
+              "value": "={{ $json.endDateTime }}"
+            },
+            {
+              "name": "singleEvents",
+              "value": "true"
+            },
+            {
+              "name": "orderBy",
+              "value": "startTime"
+            },
+            {
+              "name": "maxResults",
+              "value": "50"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Compact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const resp = $input.first().json || {};\nconst items = Array.isArray(resp.items) ? resp.items : [];\nconst conflicts = items\n  .filter((e) => e.status !== 'cancelled')\n  .map((e) => ({\n    summary: e.summary || '(no title)',\n    start: (e.start && (e.start.dateTime || e.start.date)) || null,\n    end: (e.end && (e.end.dateTime || e.end.date)) || null,\n    allDay: !(e.start && e.start.dateTime) // all-day events use start.date; usually soft conflicts\n  }));\nreturn [{ json: { free: conflicts.length === 0, conflicts } }];"
+      }
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "List Window (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Window (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Compact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
