@@ -1,0 +1,138 @@
+{
+  "name": "Contact Create Helper (agent tool)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "nodes": [
+    {
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "email",
+              "type": "string"
+            },
+            {
+              "name": "phone",
+              "type": "string"
+            },
+            {
+              "name": "organization",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "name": "website",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Build Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const j = $('When Called').first().json || {};\nconst person = {};\nconst full = String(j.name || '').trim();\nif (full) {\n  const parts = full.split(/\\s+/);\n  const given = parts.shift();\n  const family = parts.join(' ');\n  const nm = { givenName: given };\n  if (family) nm.familyName = family;\n  person.names = [nm];\n}\nconst email = String(j.email || '').trim();\nif (email) person.emailAddresses = [{ value: email }];\nconst phone = String(j.phone || '').trim();\nif (phone) person.phoneNumbers = [{ value: phone }];\nconst org = String(j.organization || '').trim();\nconst title = String(j.title || '').trim();\nif (org || title) { const o = {}; if (org) o.name = org; if (title) o.title = title; person.organizations = [o]; }\nconst website = String(j.website || '').trim();\nif (website) person.urls = [{ value: website }];\nreturn [{ json: { body: person } }];"
+      }
+    },
+    {
+      "name": "Create Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "https://people.googleapis.com/v1/people:createContact",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "personFields",
+              "value": "names,emailAddresses,phoneNumbers,organizations,urls"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      }
+    },
+    {
+      "name": "Compact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const p = $input.first().json || {};\nconst name = ((p.names || [])[0] || {}).displayName || null;\nconst email = ((p.emailAddresses || [])[0] || {}).value || null;\nconst phone = ((p.phoneNumbers || [])[0] || {}).value || null;\nconst website = ((p.urls || [])[0] || {}).value || null;\nconst err = p.error ? (p.error.message || JSON.stringify(p.error)) : null;\nreturn [{ json: {\n  ok: !!p.resourceName && !err,\n  resourceName: p.resourceName || null,\n  name, email, phone, website,\n  error: err\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Build Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Body": {
+      "main": [
+        [
+          {
+            "node": "Create Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Contact": {
+      "main": [
+        [
+          {
+            "node": "Compact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
