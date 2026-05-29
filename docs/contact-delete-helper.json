@@ -1,0 +1,105 @@
+{
+  "name": "Contact Delete Helper (agent tool)",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "nodes": [
+    {
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "resourceName",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Build URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const rn = String($('When Called').first().json.resourceName || '').trim();\nreturn [{ json: { resourceName: rn, url: 'https://people.googleapis.com/v1/' + rn + ':deleteContact' } }];"
+      }
+    },
+    {
+      "name": "Delete Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "options": {}
+      }
+    },
+    {
+      "name": "Compact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const j = $input.first().json || {};\nconst err = j.error ? (j.error.message || JSON.stringify(j.error)) : null;\nconst rn = $('When Called').first().json.resourceName || null;\nreturn [{ json: { ok: !err, deleted: err ? null : rn, error: err } }];"
+      }
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Build URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build URL": {
+      "main": [
+        [
+          {
+            "node": "Delete Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Contact": {
+      "main": [
+        [
+          {
+            "node": "Compact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

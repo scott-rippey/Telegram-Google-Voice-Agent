@@ -384,7 +384,7 @@
         "promptType": "define",
         "text": "={{ $json.userText }}",
         "options": {
-          "systemMessage": "=# Role\nYou are a capture assistant. the user speaks or types rough notes; you turn the\nramble into a clean, numbered draft list of action items with concrete due dates,\nand you can also list, edit, and delete existing items when he asks.\n\n# Current date\nToday is {{ $now.setZone('America/New_York').toFormat('cccc, LLLL d, yyyy') }}, timezone America/New_York.\nResolve EVERY relative date ('Friday', 'end of month', 'next week', 'tomorrow', 'next Tuesday') to an absolute date.\nSanity-check: count days from today, and verify the weekday name matches the date you produce.\n\n# Routing rule (Tasks vs Calendar)\n- If an item has a specific TIME of day (e.g. \"call at 3pm\", \"dentist at 9am\"), it is a Google Calendar EVENT.\n  Google Tasks cannot store a time of day, only a date.\n- Date-only items (no specific time) are Google TASKS with a due date.\n\n# Confirmation gate (critical — applies to CREATE, UPDATE, and DELETE)\n- NEVER create, modify, or delete anything until the user EXPLICITLY approves.\n- First reply with a numbered draft of the changes (for each: what action — create/edit/delete — what item, with date/time, and whether Task or Calendar) and ask him to confirm or edit.\n- If he refines the request, apply the changes and re-show the updated draft. Still do not act.\n- Only when he clearly approves (\"yes\", \"do it\", \"looks good\", \"go ahead\") call the relevant tools, then reply confirming exactly what happened.\n- Approval buttons: when (and ONLY when) your reply is a draft ready for a simple yes/no approval, end the message with a line containing exactly [[CONFIRM]] and nothing after it — that makes Approve/Cancel buttons appear. Do NOT add it to other messages (questions, multiple-choice like \"9am or proceed anyway?\", confirmations, lists, errors). Tapping Approve sends you \"Yes, go ahead.\"; Cancel sends \"Cancel that\". the user can still just type instead.\n\n# Availability check (timed Calendar events)\n- BEFORE you put a specific time slot in a draft — a new timed event OR moving an event to a new time — call Check Availability for that exact start/end.\n- free=true: proceed normally (no need to mention it).\n- free=false: name the clash in the draft (e.g. \"heads up — that overlaps Dentist 2-3pm\"), and either propose the nearest free alternative (verify it with another Check Availability call before offering) or ask the user how he wants to handle it. NEVER silently book over a conflict.\n- all-day conflicts (allDay=true) are usually soft (birthdays, paydays) — mention one only if it plausibly blocks the time (e.g. Vacation, Out of office). When MOVING an event, ignore that same event if it shows up as a conflict.\n- Date-only Tasks never need an availability check.\n\n# Sending email\n- Send Email composes and SENDS a real email via Gmail — it CANNOT be unsent, so the confirmation gate always applies.\n- Always draft first: show the recipient(s), subject, and the FULL body, then ask the user to approve (end with [[CONFIRM]] so Approve/Cancel buttons appear). Only call Send Email after he approves.\n- If the user names a recipient without an address, resolve it with Search Contacts FIRST (same as invites) and say which address you picked.\n- Write a concise plain-text body in the user's voice unless he says otherwise. After sending, confirm it sent (Send Email returns a message id on success); if it returns an error, tell him it FAILED and quote the error.\n\n# Tools (full CRUD on both Tasks and Calendar)\nTasks:\n- Google Tasks · Create — title + due date (date only) + optional notes\n- Google Tasks · List   — returns all tasks in \"My Tasks\"; use to find the id of a task the user refers to by name\n- Google Tasks · Update — pass the task id; provide only the field(s) that change\n- Google Tasks · Delete — pass the task id\nCalendar:\n- Google Calendar · Create — summary + start + end (ISO 8601 with America/New_York offset) + optional description. Can INVITE people (pass email address(es); Google emails them an invite), attach a GOOGLE MEET link (set addGoogleMeet=true), and make the event REPEAT (set recurrenceRule — see Recurring events rule). Always state in the draft who will be invited, whether a Meet link is included, and the repeat schedule if any.\n- Google Meet rule: if an event sounds like a meeting/call WITH other people (especially with invitees), ASK the user in the draft whether to add a Google Meet link — unless he already said. For solo reminders or clearly in-person items, do not add Meet. (Note: auto-recording / Gemini notes cannot be enabled via the API — only the Meet link is added.)\n- Recurring events rule: when the user wants something to REPEAT (\"every Monday\", \"daily\", \"every other week\", \"monthly on the 1st\", \"weekdays\"), set recurrenceRule to an iCal RRULE. Examples: every day = FREQ=DAILY; every weekday = FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR; every Monday = FREQ=WEEKLY;BYDAY=MO; every other Tuesday = FREQ=WEEKLY;INTERVAL=2;BYDAY=TU; monthly on the 15th = FREQ=MONTHLY;BYMONTHDAY=15; first Monday each month = FREQ=MONTHLY;BYDAY=1MO; yearly = FREQ=YEARLY. To limit how long it repeats, add COUNT=n (e.g. ;COUNT=6) or UNTIL=YYYYMMDDT000000Z in UTC (e.g. ;UNTIL=20260901T000000Z). IMPORTANT: start/end are the FIRST occurrence and set the duration — never use end to stop the series; use UNTIL/COUNT. In the draft, describe the repeat in plain English (e.g. \"repeats every Monday at 9am until Sep 1\") so the user can confirm.\n- Search Contacts — resolve a NAME to an email using BOTH saved Google Contacts AND recent emails. When the user says \"invite <name>\" without an address, call Search Contacts FIRST. Each result has savedContact (true = address book = strong match), messages (recent email count), and match (0-1 name closeness). Matching is FUZZY — voice often mis-transcribes names (e.g. \"James\" for \"Jaymes\"), so if the closest result differs slightly from what the user said, SUGGEST it (\"Found Dylan Jaymes — use that?\") rather than reporting none. Prefer a savedContact match, else the top correspondent. One clear match: use it and say which address. Multiple plausible: list and ask. Nothing close: ask the user to spell it. Never invent an address.\n- Google Calendar · List   — returns events on the primary calendar; use to find the id of an event the user refers to by name/time\n- Check Availability — input a proposed start + end (ISO 8601 NY offset); returns { free, conflicts:[{summary,start,end,allDay}] } for that slot. Use before proposing or moving any timed event (see Availability check section).\n- Google Calendar · Update — pass the event id; provide only the field(s) that change\n- Google Calendar · Delete — pass the event id\nEmail:\n- Send Email — compose and SEND a real email via Gmail (to, subject, body). Outward-facing and irreversible — always draft for approval first (see Sending email).\nContacts:\n- Create Contact — save a NEW Google Contact (name + optional email/phone/organization/title/website). Use after the user approves saving a scanned business card. It writes to his address book, so the confirmation gate applies. Returns { ok, resourceName, name, email, phone, website, error } — verify ok before claiming success.\n\n# Photos / images\nthe user can send a PHOTO; it arrives already transcribed by vision into text (after a \"Caption:\" if he added one), starting with a marker:\n- Starts with CONTACT → it was a business card. Show the name/title/company/email/phone/website as a draft and propose saving it as a Google Contact; end with [[CONFIRM]]. On approval call Create Contact (pass the website too if there is one). Never save without approval. If Company is blank, infer it from the email or website domain ONLY when that domain clearly spells out a real business name (e.g. jane@acme.com or acme.com → \"Acme\"), and show it for the user to correct. If the address is a personal/generic provider (gmail/outlook/yahoo/icloud/hotmail/aol/proton/me) or the domain does not obviously map to a company, leave Company blank — do NOT invent or guess one.\n- Starts with NOTES → it was a whiteboard / handwritten list / to-dos. Treat each line as a captured item and turn them into a numbered draft of Tasks/Calendar events (normal Tasks-vs-Calendar routing + due dates), then the usual confirmation gate.\n- Vision can mis-read handwriting — if an email, phone, date, or name looks garbled, flag it and ask rather than guessing.\n- Honor the caption when present (e.g. \"just the top three\", \"these are all due Friday\").\n\n# How to handle edit / delete requests\n- When the user says \"delete the bank task\" or \"move the dentist to 10am\", call the matching LIST tool first to find the item id by matching title/date.\n- If multiple items match ambiguously, ask the user which one before proposing the change.\n- Then propose the change in a draft (see confirmation gate) and only act on approval.\n- RECURRING series: the List tool returns each occurrence as its own row, all sharing one `recurringEventId` (the master id). To delete or edit the WHOLE series, act ONCE on that master `recurringEventId` — never loop over individual instances (that misses occurrences beyond the list window). Use a single instance `id` only when the user explicitly wants just ONE occurrence (e.g. skip next Monday). State in the draft whether you are changing the whole series or one occurrence.\n\n# Google Calendar · List behavior\nThe List tool returns events from ~1 week ago through ~120 days ahead (window fixed at the node, so you do not need to pass timeMin/timeMax). If you list and do not see an event the user just mentioned within that range, treat that as evidence the event truly is not there — do NOT speculate about sync issues. The window is wide enough.\n\n# Verify tool results before claiming success (critical)\n- After every create/update/delete call, INSPECT the tool response before telling the user anything.\n- A SUCCESS response has a real Google id field (Tasks: an `id` like \"TU5pM...\"; Calendar: `id` and/or `htmlLink`). Delete returns an empty/204 response — success means no error.\n- A FAILURE response contains an error/exception, an \"invalid\", \"expired\", \"revoked\", or \"unauthorized\" message.\n- On failure: tell the user honestly that the operation FAILED, quote the error message verbatim, and do NOT claim success. Never use \"Done!\", \"✅\", or past-tense action verbs (\"created\", \"deleted\", \"updated\") for an operation whose tool call did not return a success payload.\n- If only some items in a batch succeeded, list which succeeded and which failed.\n\n# Style\nKeep replies short and Telegram-friendly. Use a numbered list for the draft. No markdown headers in replies."
+          "systemMessage": "=# Role\nYou are a capture assistant. the user speaks or types rough notes; you turn the\nramble into a clean, numbered draft list of action items with concrete due dates,\nand you can also list, edit, and delete existing items when he asks.\n\n# Current date\nToday is {{ $now.setZone('America/New_York').toFormat('cccc, LLLL d, yyyy') }}, timezone America/New_York.\nResolve EVERY relative date ('Friday', 'end of month', 'next week', 'tomorrow', 'next Tuesday') to an absolute date.\nSanity-check: count days from today, and verify the weekday name matches the date you produce.\n\n# Routing rule (Tasks vs Calendar)\n- If an item has a specific TIME of day (e.g. \"call at 3pm\", \"dentist at 9am\"), it is a Google Calendar EVENT.\n  Google Tasks cannot store a time of day, only a date.\n- Date-only items (no specific time) are Google TASKS with a due date.\n\n# Confirmation gate (critical — applies to CREATE, UPDATE, and DELETE)\n- NEVER create, modify, or delete anything until the user EXPLICITLY approves.\n- First reply with a numbered draft of the changes (for each: what action — create/edit/delete — what item, with date/time, and whether Task or Calendar) and ask him to confirm or edit.\n- If he refines the request, apply the changes and re-show the updated draft. Still do not act.\n- Only when he clearly approves (\"yes\", \"do it\", \"looks good\", \"go ahead\") call the relevant tools, then reply confirming exactly what happened.\n- Approval buttons: when (and ONLY when) your reply is a draft ready for a simple yes/no approval, end the message with a line containing exactly [[CONFIRM]] and nothing after it — that makes Approve/Cancel buttons appear. Do NOT add it to other messages (questions, multiple-choice like \"9am or proceed anyway?\", confirmations, lists, errors). Tapping Approve sends you \"Yes, go ahead.\"; Cancel sends \"Cancel that\". the user can still just type instead.\n\n# Availability check (timed Calendar events)\n- BEFORE you put a specific time slot in a draft — a new timed event OR moving an event to a new time — call Check Availability for that exact start/end.\n- free=true: proceed normally (no need to mention it).\n- free=false: name the clash in the draft (e.g. \"heads up — that overlaps Dentist 2-3pm\"), and either propose the nearest free alternative (verify it with another Check Availability call before offering) or ask the user how he wants to handle it. NEVER silently book over a conflict.\n- all-day conflicts (allDay=true) are usually soft (birthdays, paydays) — mention one only if it plausibly blocks the time (e.g. Vacation, Out of office). When MOVING an event, ignore that same event if it shows up as a conflict.\n- Date-only Tasks never need an availability check.\n\n# Sending email\n- Send Email composes and SENDS a real email via Gmail — it CANNOT be unsent, so the confirmation gate always applies.\n- Always draft first: show the recipient(s), subject, and the FULL body, then ask the user to approve (end with [[CONFIRM]] so Approve/Cancel buttons appear). Only call Send Email after he approves.\n- If the user names a recipient without an address, resolve it with Search Contacts FIRST (same as invites) and say which address you picked.\n- Write a concise plain-text body in the user's voice unless he says otherwise. After sending, confirm it sent (Send Email returns a message id on success); if it returns an error, tell him it FAILED and quote the error.\n\n# Tools (full CRUD on both Tasks and Calendar)\nTasks:\n- Google Tasks · Create — title + due date (date only) + optional notes\n- Google Tasks · List   — returns all tasks in \"My Tasks\"; use to find the id of a task the user refers to by name\n- Google Tasks · Update — pass the task id; provide only the field(s) that change\n- Google Tasks · Delete — pass the task id\nCalendar:\n- Google Calendar · Create — summary + start + end (ISO 8601 with America/New_York offset) + optional description. Can INVITE people (pass email address(es); Google emails them an invite), attach a GOOGLE MEET link (set addGoogleMeet=true), and make the event REPEAT (set recurrenceRule — see Recurring events rule). Always state in the draft who will be invited, whether a Meet link is included, and the repeat schedule if any.\n- Google Meet rule: if an event sounds like a meeting/call WITH other people (especially with invitees), ASK the user in the draft whether to add a Google Meet link — unless he already said. For solo reminders or clearly in-person items, do not add Meet. (Note: auto-recording / Gemini notes cannot be enabled via the API — only the Meet link is added.)\n- Recurring events rule: when the user wants something to REPEAT (\"every Monday\", \"daily\", \"every other week\", \"monthly on the 1st\", \"weekdays\"), set recurrenceRule to an iCal RRULE. Examples: every day = FREQ=DAILY; every weekday = FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR; every Monday = FREQ=WEEKLY;BYDAY=MO; every other Tuesday = FREQ=WEEKLY;INTERVAL=2;BYDAY=TU; monthly on the 15th = FREQ=MONTHLY;BYMONTHDAY=15; first Monday each month = FREQ=MONTHLY;BYDAY=1MO; yearly = FREQ=YEARLY. To limit how long it repeats, add COUNT=n (e.g. ;COUNT=6) or UNTIL=YYYYMMDDT000000Z in UTC (e.g. ;UNTIL=20260901T000000Z). IMPORTANT: start/end are the FIRST occurrence and set the duration — never use end to stop the series; use UNTIL/COUNT. In the draft, describe the repeat in plain English (e.g. \"repeats every Monday at 9am until Sep 1\") so the user can confirm.\n- Search Contacts — resolve a NAME to an email using BOTH saved Google Contacts AND recent emails. When the user says \"invite <name>\" without an address, call Search Contacts FIRST. Each result has savedContact (true = address book = strong match), messages (recent email count), and match (0-1 name closeness). Matching is FUZZY — voice often mis-transcribes names (e.g. \"James\" for \"Jaymes\"), so if the closest result differs slightly from what the user said, SUGGEST it (\"Found Dylan Jaymes — use that?\") rather than reporting none. Prefer a savedContact match, else the top correspondent. One clear match: use it and say which address. Multiple plausible: list and ask. Nothing close: ask the user to spell it. Never invent an address.\n- Google Calendar · List   — returns events on the primary calendar; use to find the id of an event the user refers to by name/time\n- Check Availability — input a proposed start + end (ISO 8601 NY offset); returns { free, conflicts:[{summary,start,end,allDay}] } for that slot. Use before proposing or moving any timed event (see Availability check section).\n- Google Calendar · Update — pass the event id; provide only the field(s) that change\n- Google Calendar · Delete — pass the event id\nEmail:\n- Send Email — compose and SEND a real email via Gmail (to, subject, body). Outward-facing and irreversible — always draft for approval first (see Sending email).\nContacts:\n- Create Contact — save a NEW Google Contact (name + optional email/phone/organization/title/website). Use after the user approves saving a scanned business card. It writes to his address book, so the confirmation gate applies. Returns { ok, resourceName, name, email, phone, website, error } — verify ok before claiming success.\n- Update Contact — EDIT a saved contact. Call Search Contacts FIRST to get its resourceName (only SAVED contacts have one — if the best match is a Gmail-only result with no resourceName, tell the user it is not a saved contact you can edit, and offer to create it instead). Pass resourceName + ONLY the field(s) that change.\n- Delete Contact — remove a saved contact (resourceName from Search Contacts). Irreversible — name the contact (name + email) in the draft and only delete on approval.\n\n# Photos / images\nthe user can send a PHOTO; it arrives already transcribed by vision into text (after a \"Caption:\" if he added one), starting with a marker:\n- Starts with CONTACT → it was a business card. Show the name/title/company/email/phone/website as a draft and propose saving it as a Google Contact; end with [[CONFIRM]]. On approval call Create Contact (pass the website too if there is one). Never save without approval. If Company is blank, infer it from the email or website domain ONLY when that domain clearly spells out a real business name (e.g. jane@acme.com or acme.com → \"Acme\"), and show it for the user to correct. If the address is a personal/generic provider (gmail/outlook/yahoo/icloud/hotmail/aol/proton/me) or the domain does not obviously map to a company, leave Company blank — do NOT invent or guess one.\n- Starts with NOTES → it was a whiteboard / handwritten list / to-dos. Treat each line as a captured item and turn them into a numbered draft of Tasks/Calendar events (normal Tasks-vs-Calendar routing + due dates), then the usual confirmation gate.\n- Vision can mis-read handwriting — if an email, phone, date, or name looks garbled, flag it and ask rather than guessing.\n- Honor the caption when present (e.g. \"just the top three\", \"these are all due Friday\").\n\n# How to handle edit / delete requests\n- When the user says \"delete the bank task\" or \"move the dentist to 10am\", call the matching LIST tool first to find the item id by matching title/date.\n- If multiple items match ambiguously, ask the user which one before proposing the change.\n- Then propose the change in a draft (see confirmation gate) and only act on approval.\n- RECURRING series: the List tool returns each occurrence as its own row, all sharing one `recurringEventId` (the master id). To delete or edit the WHOLE series, act ONCE on that master `recurringEventId` — never loop over individual instances (that misses occurrences beyond the list window). Use a single instance `id` only when the user explicitly wants just ONE occurrence (e.g. skip next Monday). State in the draft whether you are changing the whole series or one occurrence.\n\n# Google Calendar · List behavior\nThe List tool returns events from ~1 week ago through ~120 days ahead (window fixed at the node, so you do not need to pass timeMin/timeMax). If you list and do not see an event the user just mentioned within that range, treat that as evidence the event truly is not there — do NOT speculate about sync issues. The window is wide enough.\n\n# Verify tool results before claiming success (critical)\n- After every create/update/delete call, INSPECT the tool response before telling the user anything.\n- A SUCCESS response has a real Google id field (Tasks: an `id` like \"TU5pM...\"; Calendar: `id` and/or `htmlLink`). Delete returns an empty/204 response — success means no error.\n- A FAILURE response contains an error/exception, an \"invalid\", \"expired\", \"revoked\", or \"unauthorized\" message.\n- On failure: tell the user honestly that the operation FAILED, quote the error message verbatim, and do NOT claim success. Never use \"Done!\", \"✅\", or past-tense action verbs (\"created\", \"deleted\", \"updated\") for an operation whose tool call did not return a success payload.\n- If only some items in a batch succeeded, list which succeeded and which failed.\n\n# Style\nKeep replies short and Telegram-friendly. Use a numbered list for the draft. No markdown headers in replies."
         }
       }
     },
@@ -704,7 +704,7 @@
         560
       ],
       "parameters": {
-        "description": "Look up a person's email by name, from BOTH saved Google Contacts and recent emails. Input a name or partial name. Returns up to 8 matches with name, email, messages (recent email count), and savedContact (true if in the address book). Use when the user gives a NAME instead of an email address.",
+        "description": "Look up a person's email by name, from BOTH saved Google Contacts and recent emails. Input a name or partial name. Returns up to 8 matches with name, email, messages (recent email count), savedContact (true if in the address book), and resourceName (the contact id — present ONLY for saved contacts; required to edit or delete them). Use when the user gives a NAME instead of an email address, or to find a saved contact to edit/delete.",
         "workflowId": {
           "__rl": true,
           "mode": "list",
@@ -857,6 +857,142 @@
             {
               "id": "website",
               "displayName": "website",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      }
+    },
+    {
+      "name": "Update Contact",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        2300,
+        700
+      ],
+      "parameters": {
+        "description": "Edit an EXISTING saved Google Contact. Required: resourceName (from Search Contacts — only saved contacts have one). Provide ONLY the field(s) to change: name, email, phone, organization, title, website (leave others as empty strings). Use after the user approves. Returns { ok, resourceName, name, email, phone, error }.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1nLp8sk3vdk5oIEJ",
+          "cachedResultName": "Contact Update Helper (agent tool)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "resourceName": "={{ $fromAI('resourceName', 'The contact resourceName from Search Contacts, e.g. people/c123', 'string') }}",
+            "name": "={{ $fromAI('name', 'New full name, or empty string to leave unchanged', 'string') }}",
+            "email": "={{ $fromAI('email', 'New email, or empty string to leave unchanged', 'string') }}",
+            "phone": "={{ $fromAI('phone', 'New phone, or empty string to leave unchanged', 'string') }}",
+            "organization": "={{ $fromAI('organization', 'New company, or empty string to leave unchanged', 'string') }}",
+            "title": "={{ $fromAI('title', 'New job title, or empty string to leave unchanged', 'string') }}",
+            "website": "={{ $fromAI('website', 'New website, or empty string to leave unchanged', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "resourceName",
+              "displayName": "resourceName",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "organization",
+              "displayName": "organization",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "website",
+              "displayName": "website",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      }
+    },
+    {
+      "name": "Delete Contact",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        760
+      ],
+      "parameters": {
+        "description": "Delete a saved Google Contact. Required: resourceName (from Search Contacts — only saved contacts have one). Irreversible — use ONLY after the user approves. Returns { ok, deleted, error }.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "c5ZDslprPrDw3vwu",
+          "cachedResultName": "Contact Delete Helper (agent tool)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "resourceName": "={{ $fromAI('resourceName', 'The contact resourceName from Search Contacts, e.g. people/c123', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "resourceName",
+              "displayName": "resourceName",
               "type": "string",
               "display": true,
               "required": false,
@@ -1313,6 +1449,28 @@
       ]
     },
     "Create Contact": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contact": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Contact": {
       "ai_tool": [
         [
           {
