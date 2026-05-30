@@ -32,22 +32,29 @@ The MAIN workflow calls the **seven helpers** as **sub-workflow tools**.
    (or ask me for my instance URL + an API key from n8n → Settings → n8n API), then verify
    with `n8n-cli workflow list`.
 
-2. **Import the seven helpers first, then MAIN** — `n8n-cli workflow create --file=docs/<file>.json`
-   for each. Record the **new workflow id** each one returns. (Heads-up: `--jq '.id'` returns the
-   id wrapped in quotes — strip them before reusing the id, or a later `workflow activate` 404s.)
+2. **Import the seven helpers FIRST.** Run `n8n-cli workflow create --file=docs/<helper>.json`
+   for each helper file (every `*-helper.json` in `docs/`). Capture the new id each one returns
+   into a map keyed by the placeholder it corresponds to (the placeholders are the literal
+   strings in MAIN's `workflowId.value` — see the mapping below). Heads-up: `--jq '.id'` returns
+   the id wrapped in quotes — strip them before reusing the id, or a later `workflow activate`
+   404s.
 
-3. **Re-link the sub-workflows in MAIN** (⚠️ import does NOT fix this for me). MAIN has seven
-   `@n8n/n8n-nodes-langchain.toolWorkflow` nodes whose `parameters.workflowId.value` still point
-   at the original instance's helper ids. Rewrite each to the NEW id of the helper I just
-   imported, then push MAIN back (`n8n-cli workflow update <mainId> --file=...`). You can
-   automate this. The mapping:
-   - `Google Calendar · Create` → Calendar Create Helper
-   - `Google Calendar · List`   → Calendar List Helper
-   - `Check Availability`       → Availability Check Helper
-   - `Search Contacts`          → Contacts Search Helper
-   - `Create Contact`           → Contact Create Helper
-   - `Update Contact`           → Contact Update Helper
-   - `Delete Contact`           → Contact Delete Helper
+   | Helper file                      | Placeholder in MAIN to replace             |
+   |----------------------------------|--------------------------------------------|
+   | `calendar-create-helper.json`    | `REPLACE_WITH_CALENDAR_CREATE_HELPER_ID`   |
+   | `calendar-list-helper.json`      | `REPLACE_WITH_CALENDAR_LIST_HELPER_ID`     |
+   | `availability-check-helper.json` | `REPLACE_WITH_AVAILABILITY_CHECK_HELPER_ID`|
+   | `contacts-search-helper.json`    | `REPLACE_WITH_CONTACTS_SEARCH_HELPER_ID`   |
+   | `contact-create-helper.json`     | `REPLACE_WITH_CONTACT_CREATE_HELPER_ID`    |
+   | `contact-update-helper.json`     | `REPLACE_WITH_CONTACT_UPDATE_HELPER_ID`    |
+   | `contact-delete-helper.json`     | `REPLACE_WITH_CONTACT_DELETE_HELPER_ID`    |
+
+3. **Rewrite MAIN to point at the new helper ids, THEN import MAIN.** MAIN's seven
+   `@n8n/n8n-nodes-langchain.toolWorkflow` nodes ship with the `REPLACE_WITH_*` placeholders
+   above in `parameters.workflowId.value`. Before importing, edit `docs/voice-assistant-MAIN.json`
+   and replace each placeholder with the matching new helper id you captured in step 2 (a plain
+   string-replace — the placeholders are unique). Then `n8n-cli workflow create --file=docs/voice-assistant-MAIN.json`.
+   No manual UI re-linking needed.
 
 4. **Credentials** — I'll create these in the n8n UI (Credentials → Add). Tell me which to make,
    then which nodes to attach each to (any node with a red triangle). Types needed:

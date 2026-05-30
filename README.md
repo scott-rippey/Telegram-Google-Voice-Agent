@@ -147,8 +147,10 @@ dropdown:
   Get Contact + Patch Contact / Delete Contact).
 
 ### 4. Re-link the sub-workflows in MAIN ⚠️ *(easy to miss)*
-Imported sub-workflow links point at the original instance, so open **MAIN** and re-select
-the helper in each of these seven tool nodes (click the node → Workflow dropdown → pick the
+MAIN's seven sub-workflow tool nodes ship with placeholder ids like
+`REPLACE_WITH_CALENDAR_CREATE_HELPER_ID` (so nothing accidentally calls a foreign instance).
+You need to point each one at the helper you just imported. Open **MAIN** and re-select the
+helper in each of these seven tool nodes (click the node → Workflow dropdown → pick the
 matching helper you imported):
 - **Google Calendar · Create** → Calendar Create Helper
 - **Google Calendar · List** → Calendar List Helper
@@ -157,6 +159,9 @@ matching helper you imported):
 - **Create Contact** → Contact Create Helper
 - **Update Contact** → Contact Update Helper
 - **Delete Contact** → Contact Delete Helper
+
+*(The agent-driven flow above does this automatically — it captures each helper's new id on
+import and string-replaces the placeholders in MAIN before importing MAIN.)*
 
 ### 5. Replace the placeholders
 - **Your Telegram id (required — this locks the bot to you):** MAIN's **`Authorized?`** node has
