@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.0
+
+Adds email reading — the assistant can now read your inbox, not just send.
+
+- **Read Emails** — a new READ-ONLY tool: ask the bot "do I have any unread emails?",
+  "summarize my latest 2 emails", or "did the title company email me?" The agent sets a
+  Gmail search query (`is:unread`, `from:…`, `subject:…`, `newer_than:2d`, or empty for most
+  recent) plus how many to fetch, and summarizes concisely. Because reading is safe and
+  reversible, it runs with **no confirmation gate** (unlike Send Email).
+- **No new credential and no new helper** — it's a native `gmailTool` inside MAIN and reuses
+  the same Gmail OAuth2 connection your Send Email already uses. Still **8 workflows** (MAIN
+  + 7 helpers); the agent now has 16 tools (was 15).
+
 ## v1.1.0
 
 Adds photo input, a security gate, and full contact management.

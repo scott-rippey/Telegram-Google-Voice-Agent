@@ -1,6 +1,6 @@
 # Voice / Photo → Google Tasks, Calendar, Contacts & Email Assistant (n8n)
 
-**Version 1.1.0** · [Changelog](CHANGELOG.md)
+**Version 1.2.0** · [Changelog](CHANGELOG.md)
 
 A Telegram bot that turns your **voice notes, typed messages, or photos** into action. Talk to it
 in plain English ("schedule a call with Dana next Tuesday at 2 and add a Meet link"), or **snap a
